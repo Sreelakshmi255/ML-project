@@ -1,0 +1,24 @@
+.feature-toolbar{display:flex;align-items:end;gap:14px;flex-wrap:wrap;padding:18px 20px;border-bottom:1px solid var(--line)}
+.feature-toolbar label,.alert-form label{display:grid;gap:5px;color:var(--muted);font-size:12px;font-weight:700;min-width:145px;flex:1}
+.feature-toolbar input,.feature-toolbar select,.alert-form input,.alert-form select{width:100%;min-height:42px;padding:9px 11px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+.feature-toolbar .btn{min-height:42px}
+.feature-table{width:100%;overflow:auto}
+.feature-table-row{display:grid;grid-template-columns:1.2fr 1fr 1fr 1fr;gap:12px;align-items:center;min-width:590px;padding:14px 20px;border-bottom:1px solid var(--line)}
+.feature-table-row:last-child{border-bottom:0}
+.feature-table-head{background:#f4f7fa;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase}
+.feature-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.feature-stat{display:grid;gap:4px;padding:14px 18px;background:#fff}
+.feature-stat span{color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase}
+.feature-stat b{font-size:18px}
+.alert-workspace{padding-top:0}
+.alert-layout{display:grid;grid-template-columns:minmax(220px,.75fr) minmax(320px,1.25fr);gap:28px;align-items:start}
+.alert-form{display:grid;gap:13px;padding:18px;background:#f4f7fa;border-radius:7px}
+.alert-form .btn{min-height:42px}
+.alert-list{border-top:1px solid var(--line)}
+.alert-row{display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;padding:13px 4px;border-bottom:1px solid var(--line)}
+.alert-row>div{display:grid;gap:2px}
+.alert-row>div span{color:var(--muted);font-size:12px}
+.alert-triggered{background:#e5f5ef;color:var(--green)}
+.icon-button{width:36px;height:36px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--muted);font-size:20px}
+.alert-disclaimer{font-size:12px;margin:14px 0 0}
+@media(max-width:700px){.alert-layout{grid-template-columns:1fr}.feature-toolbar{align-items:stretch}.feature-toolbar label{min-width:100%}.alert-row{grid-template-columns:1fr auto}.alert-row .icon-button{grid-column:2;grid-row:1}}
