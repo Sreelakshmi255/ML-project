@@ -1,1 +1,41 @@
-{% extends "base.html" %}{% block title %}Profile{% endblock %}{% block content %}<section class="page-hero compact"><div class="eyebrow">PROFILE</div><h1>Your account.</h1><p>Account details for the current local demo session.</p></section><section class="section two-col"><div class="info-panel"><span class="avatar">{{ current_user.name[0]|upper }}</span><h2>Profile details</h2><form id="profile-form"><label>Full name<input name="name" value="{{ current_user.name }}" minlength="2" maxlength="120" required></label><label>Email<input value="{{ current_user.email }}" readonly></label><button class="btn primary" type="submit">Save changes</button><div id="profile-message" class="inline-error" hidden></div></form><span class="badge">{{ current_user.role|capitalize }}</span></div><div class="info-panel"><h2>Privacy note</h2><p>Predictions are stored in the local SQLite database and associated with your account. This demonstration does not connect to a pharmacy or insurer.</p></div></section>{% endblock %}{% block scripts %}<script>document.getElementById("profile-form").addEventListener("submit",async e=>{e.preventDefault();const message=document.getElementById("profile-message"),name=e.currentTarget.elements.name.value.trim(),r=await fetch("{{ url_for('api_profile') }}",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({name})});const body=await r.json();message.hidden=false;message.textContent=r.ok?"Profile updated.":body.error?.message||"Unable to update profile.";if(r.ok)location.reload()});</script>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+{% block content %}
+<section class="page-hero compact profile-hero">
+	<div class="eyebrow">ACCOUNT PROFILE</div>
+	<h1>Your profile.</h1>
+	<p>Review your account details.</p>
+</section>
+
+<section class="section profile-page">
+	<div class="profile-grid">
+		<section class="profile-panel profile-account" aria-labelledby="account-title">
+			<div class="profile-panel-heading">
+				<span class="avatar">{{ current_user.name[0]|upper }}</span>
+				<div>
+					<div class="eyebrow">YOUR ACCOUNT</div>
+					<h2 id="account-title">{{ current_user.name }}</h2>
+					<p>{{ current_user.email }}</p>
+				</div>
+			</div>
+			<dl class="profile-details">
+				<div><dt>Account type</dt><dd>{{ 'Administrator' if current_user.role == 'admin' else 'User' }}</dd></div>
+				<div><dt>Member since</dt><dd>{{ current_user.created_at.strftime('%B %d, %Y') }}</dd></div>
+				<div><dt>Last sign-in</dt><dd>{% if current_user.last_login %}{{ current_user.last_login.strftime('%B %d, %Y at %I:%M %p') }}{% else %}Not recorded{% endif %}</dd></div>
+			</dl>
+		</section>
+
+		<section class="profile-panel profile-contact" aria-labelledby="project-contact-title">
+			<div class="eyebrow">CONTACT</div>
+			<h2 id="project-contact-title">RefillPredict</h2>
+			<dl class="profile-details">
+				<div><dt>Contact</dt><dd><a href="mailto:hello@refillpredict.example">hello@refillpredict.example</a></dd></div>
+				<div><dt>Response target</dt><dd>Within 24 hours</dd></div>
+				<div><dt>Location</dt><dd>Bengaluru, India</dd></div>
+				<div><dt>Operating hours</dt><dd>Monday-Friday, 9:00 AM-5:00 PM IST</dd></div>
+			</dl>
+		</section>
+	</div>
+
+</section>
+{% endblock %}

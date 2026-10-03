@@ -1,1 +1,94 @@
-{% extends "base.html" %}{% block title %}Dataset Management{% endblock %}{% block content %}<section class="page-hero compact"><div class="eyebrow">ADMIN · DATASET</div><h1>Historical pricing dataset.</h1><p>Validate a CSV before any future ingestion. Uploaded content is treated as untrusted data and is never executed.</p></section><section class="section"><div class="info-panel"><h2>Validate CSV</h2><form id="dataset-form"><label>Pricing dataset<input type="file" name="dataset" accept=".csv,text/csv" required></label><button class="btn primary" type="submit">Validate dataset</button></form><div id="dataset-result" class="callout" hidden></div><p>Required columns: drug_name, dosage_strength, quarter, year, price, brand_status.</p></div></section>{% endblock %}{% block scripts %}<script>document.getElementById("dataset-form").addEventListener("submit",async e=>{e.preventDefault();const result=document.getElementById("dataset-result"),r=await fetch("{{ url_for('api_dataset_upload') }}",{method:"POST",body:new FormData(e.currentTarget)}),body=await r.json();result.hidden=false;result.textContent=r.ok?`Validated ${body.data.valid_rows} of ${body.data.rows} rows.`:body.error?.message||"Dataset validation failed."});</script>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Dataset Management{% endblock %}
+{% block content %}
+<section class="page-hero compact dataset-hero">
+	<div class="eyebrow">ADMIN / DATASET</div>
+	<h1>Dataset management</h1>
+	<p>Maintain historical medication prices with individual records or validate a dataset file.</p>
+</section>
+
+<section class="section dataset-page">
+	<div class="dataset-workspace">
+		<section class="dataset-panel dataset-entry-panel" aria-labelledby="manual-entry-title">
+			<div class="dataset-panel-heading">
+				<div class="dataset-step">01</div>
+				<div>
+					<div class="eyebrow">PRICE RECORD</div>
+					<h2 id="manual-entry-title">Add a drug record</h2>
+					<p>Enter one historical price point for a medication.</p>
+				</div>
+			</div>
+			<form id="manual-drug-form" class="dataset-entry-form">
+				<label class="dataset-field-wide">Drug name<input type="text" name="drug_name" placeholder="e.g. Metformin" autocomplete="off" required></label>
+				<label>Dosage strength (mg)<input type="number" name="dosage_strength" min="1" step="0.1" placeholder="20" required></label>
+				<label>Price per refill ($)<input type="number" name="price" min="0.01" step="0.01" placeholder="12.50" required></label>
+				<label>Quarter<select name="quarter"><option>Q1</option><option>Q2</option><option>Q3</option><option>Q4</option></select></label>
+				<label>Year<input type="number" name="year" min="1900" max="2100" value="2026" required></label>
+				<label>Medication type<select name="brand_status"><option>Generic</option><option>Brand</option></select></label>
+				<div class="dataset-submit-row">
+					<button class="btn primary" type="submit">Add record</button>
+					<span>All fields are required.</span>
+				</div>
+			</form>
+			<div id="manual-result" class="callout dataset-result" role="status" aria-live="polite" hidden></div>
+		</section>
+
+		<section class="dataset-panel dataset-upload-panel" aria-labelledby="csv-title">
+			<div class="dataset-panel-heading">
+				<div class="dataset-step dataset-step-muted">02</div>
+				<div>
+					<div class="eyebrow">FILE CHECK</div>
+					<h2 id="csv-title">Validate a CSV</h2>
+					<p>Check the file structure before using it.</p>
+				</div>
+			</div>
+			<form id="dataset-form" class="dataset-upload-form">
+				<label class="dataset-file-field">Pricing dataset<input type="file" name="dataset" accept=".csv,text/csv" required></label>
+				<button class="btn secondary" type="submit">Validate file</button>
+			</form>
+			<div id="dataset-result" class="callout dataset-result" role="status" aria-live="polite" hidden></div>
+			<div class="dataset-requirements">
+				<h3>Required columns</h3>
+				<p>drug_name, dosage_strength, quarter, year, price, brand_status</p>
+			</div>
+		</section>
+	</div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("manual-drug-form").addEventListener("submit", async event => {
+	event.preventDefault();
+	const form = event.currentTarget;
+	const result = document.getElementById("manual-result");
+	const payload = Object.fromEntries(new FormData(form));
+	const response = await fetch("{{ url_for('api_admin_historical_prices') }}", {
+		method: "POST",
+		headers: {"Content-Type": "application/json"},
+		body: JSON.stringify(payload)
+	});
+	const body = await response.json();
+	result.hidden = false;
+	result.textContent = response.ok
+		? `Saved ${body.data.drug_name} (${body.data.quarter}, ${body.data.year}) at $${Number(body.data.price).toFixed(2)}.`
+		: body.error?.message || "Unable to save manual drug record.";
+	result.classList.toggle("dataset-result-error", !response.ok);
+	if (response.ok) form.reset();
+});
+
+document.getElementById("dataset-form").addEventListener("submit", async event => {
+	event.preventDefault();
+	const result = document.getElementById("dataset-result");
+	const response = await fetch("{{ url_for('api_dataset_upload') }}", {
+		method: "POST",
+		body: new FormData(event.currentTarget)
+	});
+	const body = await response.json();
+	result.hidden = false;
+	result.textContent = response.ok
+		? `Validated ${body.data.valid_rows} of ${body.data.rows} rows.`
+		: body.error?.message || "Dataset validation failed.";
+	result.classList.toggle("dataset-result-error", !response.ok);
+});
+</script>
+{% endblock %}

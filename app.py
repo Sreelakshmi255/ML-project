@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash
+from flask import Flask, abort, render_template, request, redirect, url_for, session, jsonify, flash
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
@@ -76,12 +76,28 @@ def current_user():
     uid = session.get("user_id")
     return db.session.get(User, uid) if uid else None
 
+def active_account_redirect():
+    user = current_user()
+    if user:
+        endpoint = "admin_dashboard" if user.role == "admin" else "dashboard"
+        return redirect(url_for(endpoint))
+    return None
+
 def login_required(fn):
     @wraps(fn)
     def wrapped(*args, **kwargs):
         if not current_user():
             flash("Please sign in to access your workspace.", "warning")
             return redirect(url_for("login", next=request.path))
+        return fn(*args, **kwargs)
+    return wrapped
+
+def admin_write_required(fn):
+    @wraps(fn)
+    def wrapped(*args, **kwargs):
+        user = current_user()
+        if not user or user.role != "admin":
+            return api_error("Your account has read-only access.", "READ_ONLY", 403)
         return fn(*args, **kwargs)
     return wrapped
 
@@ -142,18 +158,22 @@ def contact():
     if request.method == "POST":
         name = request.form.get("name","").strip()[:120]
         email = request.form.get("email","").strip()[:180]
+        subject = request.form.get("subject", "").strip()[:160]
         message = request.form.get("message","").strip()[:2000]
-        if not name or not validate_email(email) or not message:
-            flash("Please complete all contact fields.", "danger")
+        if not name or not validate_email(email) or not subject or not message:
+            flash("Please complete your name, valid email, subject, and message.", "danger")
         else:
-            db.session.add(ContactMessage(name=name, email=email, message=message))
+            db.session.add(ContactMessage(name=name, email=email, message=f"Subject: {subject}\n\n{message}"))
             db.session.commit()
-            flash("Thanks. Your message has been recorded.", "success")
+            flash("Thanks. Your message has been recorded in this demo.", "success")
             return redirect(url_for("contact"))
     return render_template("public/contact.html")
 
 @app.route("/register", methods=["GET","POST"])
 def register():
+    active_redirect = active_account_redirect()
+    if active_redirect:
+        return active_redirect
     if request.method == "POST":
         name = request.form.get("name","").strip()[:120]
         email = request.form.get("email","").strip().lower()[:180]
@@ -172,10 +192,13 @@ def register():
 
 @app.route("/login", methods=["GET","POST"])
 def login():
+    active_redirect = active_account_redirect()
+    if active_redirect:
+        return active_redirect
     if request.method == "POST":
         email = request.form.get("email","").strip().lower()
         password = request.form.get("password","")
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(email=email, role="user").first()
         if user and check_password_hash(user.password_hash, password):
             session.clear(); session["user_id"] = user.id
             user.last_login = datetime.utcnow(); db.session.commit()
@@ -211,6 +234,9 @@ def dashboard():
 @app.route("/predict")
 @login_required
 def predict_page():
+    if current_user().role != "admin":
+        flash("Your account has read-only access.", "warning")
+        return redirect(url_for("dashboard"))
     return render_template("dashboard/predict.html", options=predictor.options())
 
 @app.route("/results/<int:prediction_id>")
@@ -222,7 +248,7 @@ def results(prediction_id):
 @app.route("/history")
 @login_required
 def history():
-    return render_template("dashboard/history.html")
+    return render_template("dashboard/history.html", admin_view=False)
 
 @app.route("/comparison")
 @login_required
@@ -241,6 +267,9 @@ def profile():
 
 @app.route("/admin/login", methods=["GET","POST"])
 def admin_login():
+    active_redirect = active_account_redirect()
+    if active_redirect:
+        return active_redirect
     if request.method == "POST":
         email=request.form.get("email","").strip().lower()
         password=request.form.get("password","")
@@ -256,6 +285,19 @@ def admin_login():
 def admin_dashboard():
     metrics = predictor.metrics()
     return render_template("admin/dashboard.html", metrics=metrics)
+
+@app.route("/admin/history")
+@admin_required
+def admin_history():
+    return render_template("dashboard/history.html", admin_view=True)
+
+@app.route("/admin/results/<int:prediction_id>")
+@admin_required
+def admin_results(prediction_id):
+    prediction = db.session.get(Prediction, prediction_id)
+    if not prediction:
+        abort(404)
+    return render_template("dashboard/results.html", prediction=prediction, admin_view=True)
 
 @app.route("/admin/dataset")
 @admin_required
@@ -277,6 +319,7 @@ def api_options():
 
 @app.post("/api/predict")
 @login_required
+@admin_write_required
 def api_predict():
     payload = request.get_json(silent=True) or request.form.to_dict()
     data, error = validate_prediction_input(payload)
@@ -312,11 +355,36 @@ def api_history():
 
 @app.delete("/api/history/<int:prediction_id>")
 @login_required
+@admin_write_required
 def api_delete_history(prediction_id):
     p=Prediction.query.filter_by(id=prediction_id,user_id=current_user().id).first()
     if not p: return api_error("Prediction not found.", "NOT_FOUND", 404)
     db.session.delete(p); db.session.commit()
     return jsonify({"success": True, "ok":True})
+
+@app.get("/api/admin/history")
+@admin_required
+def api_admin_history():
+    search = request.args.get("search", "").strip()[:120]
+    query = Prediction.query.join(User, User.id == Prediction.user_id)
+    if search:
+        pattern = f"%{search}%"
+        query = query.filter(db.or_(
+            Prediction.drug_name.ilike(pattern),
+            User.name.ilike(pattern),
+            User.email.ilike(pattern),
+        ))
+    rows = query.order_by(Prediction.prediction_date.desc()).all()
+    return jsonify({"success": True, "data": [{
+        "id": prediction.id,
+        "user_name": db.session.get(User, prediction.user_id).name,
+        "user_email": db.session.get(User, prediction.user_id).email,
+        "drug_name": prediction.drug_name,
+        "dosage": prediction.dosage_strength,
+        "brand_status": prediction.brand_status,
+        "predicted_cost": prediction.predicted_cost,
+        "date": prediction.prediction_date.strftime("%Y-%m-%d"),
+    } for prediction in rows], "count": len(rows)})
 
 @app.get("/api/trends")
 @login_required
@@ -471,6 +539,7 @@ def api_contact():
 
 @app.patch("/api/profile")
 @login_required
+@admin_write_required
 def api_profile():
     payload=request.get_json(silent=True) or {}
     name=str(payload.get("name", "")).strip()[:120]
@@ -481,6 +550,57 @@ def api_profile():
     db.session.commit()
     return jsonify({"success": True, "data":{"name":user.name,"email":user.email,"role":user.role}})
 
+
+@app.post("/api/admin/historical-prices")
+@admin_required
+def api_admin_historical_prices():
+    payload = request.get_json(silent=True) or request.form.to_dict()
+    drug_name = str(payload.get("drug_name", "")).strip()[:120]
+    dosage_strength = payload.get("dosage_strength")
+    quarter = str(payload.get("quarter", "")).strip().upper()
+    year = payload.get("year")
+    price = payload.get("price")
+    brand_status = str(payload.get("brand_status", "")).strip()
+
+    try:
+        dosage = float(dosage_strength)
+        price_value = float(price)
+        year_value = int(year)
+    except (TypeError, ValueError):
+        return api_error("Enter valid dosage, year, and price values.")
+
+    if not drug_name:
+        return api_error("Drug name is required.")
+    if dosage <= 0:
+        return api_error("Dosage must be greater than zero.")
+    if quarter not in {"Q1", "Q2", "Q3", "Q4"}:
+        return api_error("Quarter must be one of Q1, Q2, Q3, or Q4.")
+    if year_value < 1900 or year_value > 2100:
+        return api_error("Year must be a realistic value.")
+    if price_value <= 0:
+        return api_error("Price must be greater than zero.")
+    if brand_status not in {"Generic", "Brand"}:
+        return api_error("Choose Generic or Brand pricing.")
+
+    record = HistoricalPrice(
+        drug_name=drug_name,
+        dosage_strength=dosage,
+        quarter=quarter,
+        year=year_value,
+        price=price_value,
+        brand_status=brand_status,
+    )
+    db.session.add(record)
+    db.session.commit()
+    return jsonify({"success": True, "data": {
+        "id": record.id,
+        "drug_name": record.drug_name,
+        "dosage_strength": record.dosage_strength,
+        "quarter": record.quarter,
+        "year": record.year,
+        "price": record.price,
+        "brand_status": record.brand_status,
+    }}), 201
 
 @app.post("/api/admin/dataset")
 @admin_required

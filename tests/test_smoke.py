@@ -26,7 +26,7 @@ def test_invalid_prediction_returns_stable_error():
     from app import app
     app.config.update(TESTING=True)
     client = app.test_client()
-    client.post("/login", data={"email":"demo@example.com", "password":"Demo@12345"})
+    client.post("/admin/login", data={"email":"admin@example.com", "password":"Admin@12345"})
     response = client.post("/api/predict", json={"drug_name":"Metformin", "dosage_mg":"nan", "brand_status":"Generic"})
     assert response.status_code == 400
     body = response.get_json()
