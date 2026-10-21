@@ -79,10 +79,10 @@ def test_regular_user_can_create_and_delete_own_alert_only():
 
 def test_feature_pages_render_for_signed_in_user():
     client = signed_in_client()
-    for path in ("/dashboard", "/history", "/comparison", "/trends", "/profile"):
+    for path in ("/dashboard", "/predict", "/history", "/comparison", "/trends", "/profile"):
         response = client.get(path)
         assert response.status_code == 200
-    assert client.get("/predict").status_code == 302
+    assert b'href="/predict"' in client.get("/dashboard").data
 
 
 def test_profile_shows_account_and_project_contact_details():
@@ -111,15 +111,18 @@ def test_prediction_includes_range_and_indicative_confidence():
 
 def test_users_are_read_only_and_admin_can_review_everyones_history():
     client = signed_in_client()
+    prediction_response = client.post("/api/predict", json={
+        "drug_name": "Metformin", "dosage_mg": 20, "brand_status": "Generic",
+        "q1_price": 12.5, "q2_price": 12.8, "q3_price": 13.1, "q4_price": 13.4,
+    })
+    assert prediction_response.status_code == 200
+    own_prediction_id = prediction_response.get_json()["id"]
+    assert client.get(f"/results/{own_prediction_id}").status_code == 200
     prediction_data = {
         "drug_name": "Metformin", "dosage_strength": 20, "brand_status": "Generic",
         "q1_price": 12.5, "q2_price": 12.8, "q3_price": 13.1, "q4_price": 13.4,
         "predicted_cost": 13.0, "low_cost": 11.0, "high_cost": 15.0, "model_name": "test",
     }
-    assert client.post("/api/predict", json={
-        "drug_name": "Metformin", "dosage_mg": 20, "brand_status": "Generic",
-        "q1_price": 12.5, "q2_price": 12.8, "q3_price": 13.1, "q4_price": 13.4,
-    }).status_code == 403
     assert client.delete("/api/history/1").status_code == 403
     assert client.patch("/api/profile", json={"name": "Changed Name"}).status_code == 403
 
@@ -130,7 +133,7 @@ def test_users_are_read_only_and_admin_can_review_everyones_history():
         admin_prediction = Prediction(user_id=admin.id, **prediction_data)
         db.session.add_all([user_prediction, admin_prediction])
         db.session.commit()
-        prediction_ids = [user_prediction.id, admin_prediction.id]
+        prediction_ids = [own_prediction_id, user_prediction.id, admin_prediction.id]
 
     admin_session = admin_client()
     assert admin_session.get("/admin/history").status_code == 200

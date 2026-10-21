@@ -234,9 +234,6 @@ def dashboard():
 @app.route("/predict")
 @login_required
 def predict_page():
-    if current_user().role != "admin":
-        flash("Your account has read-only access.", "warning")
-        return redirect(url_for("dashboard"))
     return render_template("dashboard/predict.html", options=predictor.options())
 
 @app.route("/results/<int:prediction_id>")
@@ -319,7 +316,6 @@ def api_options():
 
 @app.post("/api/predict")
 @login_required
-@admin_write_required
 def api_predict():
     payload = request.get_json(silent=True) or request.form.to_dict()
     data, error = validate_prediction_input(payload)
